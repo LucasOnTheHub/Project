@@ -1,5 +1,14 @@
 node_modules/
 dist/
+dist-ui/
 *.js.map
 .project/index.db
 .DS_Store
+*.log
+.env
+.env.*
+*.sqlite
+*.db
+release/
+out/
+vitest.config.ts.timestamp-*

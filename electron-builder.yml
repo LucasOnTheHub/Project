@@ -1,0 +1,59 @@
+appId: com.lucasonthehub.project-dot
+productName: Project.
+copyright: Copyright © 2026 LucasOnTheHub
+
+# Répertoires
+directories:
+  output: release
+  buildResources: build-resources
+
+# Fichiers embarqués dans l'app
+files:
+  - dist/**/*
+  - dist-ui/**/*
+  - node_modules/**/*
+  - package.json
+
+# macOS
+mac:
+  category: public.app-category.productivity
+  icon: build-resources/icon.icns
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+
+# Windows
+win:
+  icon: build-resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+# Linux
+linux:
+  icon: build-resources/icon.png
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+  category: Office
+
+# NSIS (Windows installer)
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# Auto-update (GitHub Releases)
+publish:
+  provider: github
+  owner: LucasOnTheHub
+  repo: Project.

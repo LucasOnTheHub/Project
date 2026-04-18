@@ -13,8 +13,12 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "typeRoots": [
+      "/sessions/zen-focused-keller/tmp/m5_deps/node_modules/@types",
+      "node_modules/@types"
+    ]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "dist-ui", "tests", "src/ui/**"]
 }
