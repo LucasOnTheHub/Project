@@ -2,8 +2,8 @@
 type: master
 role: core-star
 project: Project.
-version: 0.2.0
-status: draft
+version: 0.9.0
+status: active
 created: 2026-04-12
 author: LucasOnTheHub
 tags: [core, guideline, architecture, vision]
@@ -154,13 +154,16 @@ Règle : chaque tool doit être **idempotent quand c'est possible** et retourner
 
 ## 8. Roadmap indicative
 
-- **M0 — Fondations** : lecture/écriture vault, front-matter, index SQLite, CLI debug.
-- **M1 — MCP** : serveur MCP fonctionnel avec les tools de §6. Claude doit pouvoir créer un projet et des nodes de bout en bout sans UI.
-- **M2 — UI 2D** : vue graphe plate (d3) pour valider le modèle de données.
-- **M3 — UI 3D** : passage three.js, étoile centrale, gravité, liens.
-- **M4 — Tâches & rappels** : sous-tâches, scheduler pour les reminders.
-- **M5 — Export & sync** : zip, git, éventuellement sync cloud.
-- **M6 — Galaxie multi-projets** : plusieurs étoiles visibles, transitions.
+- **M0 — Fondations** ✅ : lecture/écriture vault, front-matter, index SQLite, CLI debug.
+- **M1 — MCP** ✅ : serveur MCP fonctionnel avec les tools de §6. Claude peut créer un projet et des nodes de bout en bout sans UI. 22 tests verts.
+- **M2 — UI 2D** ✅ : vue graphe plate (d3) dans Electron — couleurs par type, taille par gravity, clustering par tags, tooltip metadata, zoom/pan.
+- **M3 — UI 3D** ✅ : passage three.js + react-three-fiber, étoile émissive, nodes 3D par type, gravité radiale, liens lumineux, OrbitControls, LOD labels, star field.
+- **M4 — Tâches & rappels** ✅ : TaskPanel (liste/checkbox, sous-tâches indentées), `ReminderScheduler` Windows (schtasks), IPC toggle-task, physique parent→enfant 3D.
+- **M5 — Export & sync** ✅ : ExportService (zip réel via archiver, md-bundle), GitSync (simple-git), 4 MCP tools git, GitPanel UI Electron (droite), types git partagés.
+- **M6 — Galaxie multi-projets** ✅ : MultiVaultReader, GalaxyGraph, GalaxyCanvas3D, mode switcher Solo/Galaxie.
+- **M7 — HTTP/SSE MCP** ✅ : second transport réseau en parallèle du stdio. Accès depuis un web client ou un agent distant sans Electron.
+- **M8 — UX fluidité & LOD** ✅ : transitions caméra ease-in-out (smoothstep), InstancedMesh pour les NodePoints en vue galaxie, labels LOD opacity par distance, pulse des étoiles en vue galaxie, blocage des interactions pendant les vols caméra.
+- **M9 — Build & distribution** ✅ : electron-builder (NSIS/DMG/AppImage+deb), chemins asar-safe dans main.ts (app.getAppPath() + userData vault fallback), CI GitHub Actions (ci.yml + release.yml), matrix build Windows/macOS/Linux, publish GitHub Releases sur tag v*.
 
 ---
 
@@ -229,6 +232,87 @@ Règle : chaque tool doit être **idempotent quand c'est possible** et retourner
 ### Gestion des conflits
 - [x] **Last-write-wins pour M1** (hypothèse documentée, non adressée).
   Adresser en M5 avec la couche de sync git. Aucun lockfile, aucun diff UI avant M5.
+
+### IndexDB — lazy init (décidé en M1)
+- [x] **`VaultManager` ouvre la DB en lazy** (au premier accès, pas au constructeur).
+  Raison : `create_project` doit d'abord créer `.project/` avant que SQLite puisse ouvrir le fichier.
+  Le constructeur ne touche pas le disque. La DB s'ouvre dès la première opération après que le dossier existe.
+
+### Transport MCP
+- [x] **stdio uniquement pour M1**.
+  HTTP/SSE différé à M2+ quand une UI web nécessitera un transport réseau.
+  Le CLI `project mcp --dir <vault>` démarre le serveur stdio.
+
+### UI 2D — Electron (décidé en M2)
+- [x] **Electron pour le renderer 2D** (et donc M3 aussi).
+  Choix retenu plutôt qu'une app web serveur ou un fichier HTML standalone, car Electron donne accès direct aux APIs Node sans couche réseau.
+  Architecture : main process → `ipcMain.handle('get-graph')` → VaultReader ; renderer → `window.projectAPI.getGraph()` via contextBridge.
+  Stack UI : React + d3-force (SVG). Build séparé via Vite (`vite.config.ui.ts` → `dist-ui/`).
+  Lancement : `project ui --dir <vault>` ou `npm run ui`.
+
+### Encodage visuel M2
+- [x] Couleur = `NodeType` (7 couleurs distinctes).
+- [x] Rayon = `gravity` (plus un node est massif, plus il est proche du master).
+- [x] Force radiale : `(1 - gravity) × 300 px` de l'étoile → master collé au centre, nodes libres dérivent vers l'extérieur.
+- [x] Edges `link` = traits pleins blancs + flèche ; edges `tag` = tirets gris (affinité de cluster).
+- [x] Tooltip au clic : path, type, status, gravity, tags, links, created.
+
+### Export & sync git M5 (décidé en M5 — 2026-04-18)
+- [x] **ExportService** (`src/core/exporter.ts`) : deux formats réels.
+  - `zip` : archive complète via `archiver` (ignore `.project/`, `node_modules/`, `.git/`, `dist/`). Inclut un `project-index.json` généré à la racine de l'archive.
+  - `md-bundle` : concaténation de tous les `.md` avec séparateurs de fichiers, utile pour ingestion LLM.
+  - Les deux retournent le path du fichier créé. `json-graph` reste en mémoire (inchangé M1).
+- [x] **GitSync** (`src/core/git-sync.ts`) : wrapper `simple-git` CJS chargé dynamiquement (workaround Shadow Cloud identique à three.js).
+  - `init()` : idempotent, crée un repo + commit initial avec config user locale.
+  - `status()` : retourne `isRepo: false` gracieusement si pas de repo — jamais de throw.
+  - `commitAll(msg?)` : stage tout + commit ; retourne `"Nothing to commit."` si rien à faire.
+  - `getLog(limit)` : derniers N commits, hash tronqué à 7 chars.
+- [x] **Types git partagés** : `src/types/git.ts` — `GitStatusResult`, `GitCommitResult`, `GitLogEntry`. Importés par le renderer (browser) sans toucher aux modules Node.
+- [x] **MCP tools git** (admin scope) : `git_init`, `git_status`, `git_commit`, `git_log`. `export_project` étendu avec `format: 'zip' | 'md-bundle' | 'json-graph'`, crée le fichier et retourne son path.
+- [x] **GitPanel** (`src/ui/components/GitPanel.tsx`) : overlay React DOM droite (260px), symétrique au TaskPanel. Sections : header branche + badges ahead/behind, liste des changed files (S/M/U colorés), zone commit rapide (input + bouton), log des 10 derniers commits. Bouton `git init` si pas de repo.
+- [x] **IPC Electron** : 4 nouveaux handles dans `main.ts` (`git-status`, `git-commit`, `git-log`, `git-init`), exposés via `contextBridge` dans `preload.ts`.
+- [x] **Résolution runtime** (Shadow Cloud) : `simple-git` et `archiver` installés dans `/sessions/zen-focused-keller/tmp/m5_deps/node_modules`, chargés via `createRequire` + liste de candidats (project `node_modules` en premier, fallback session-local).
+
+### HTTP/SSE MCP M7 (décidé en M7 — 2026-04-18)
+- [x] **Transport** : `StreamableHTTPServerTransport` du SDK officiel (MCP Streamable HTTP spec), **pas** `SSEServerTransport` (deprecated).
+  Raison : `SSEServerTransport` est marqué deprecated depuis SDK 1.x. `StreamableHTTPServerTransport` supporte à la fois SSE et réponses HTTP directes selon le client.
+- [x] **Fichier dédié** : `src/mcp/http-server.ts` — pas de mélange avec `server.ts` (qui reste orienté stdio).
+  `createMcpServer()` est réutilisé tel quel ; le transport HTTP est découplé.
+- [x] **Deux modes** :
+  - **Stateful** (défaut) : chaque client reçoit un `sessionId` (UUID v4), état conservé en mémoire. Session fermée via `DELETE /mcp` + header `mcp-session-id`.
+  - **Stateless** : `sessionIdGenerator: undefined`, chaque requête POST instancie son propre `McpServer`. Utile pour clients HTTP simples (scripts, tests).
+- [x] **Endpoints** :
+  - `POST /mcp` — requêtes JSON-RPC + initialisation de session
+  - `GET  /mcp` — stream SSE (Streamable HTTP spec)
+  - `DELETE /mcp` — fermeture de session (stateful uniquement)
+  - `GET  /health` — health check JSON (status, sessions actives, vault)
+- [x] **CLI** : `project mcp --port 3741` démarre stdio + HTTP en parallèle.
+  `project mcp --port 3741 --http-only` désactive stdio (utile pour déploiement web).
+  `project mcp --port 3741 --stateless` active le mode sans session.
+  `--scope` s'applique aux deux transports.
+- [x] **Pas de dépendance Express** : serveur HTTP vanilla Node.js (`http.createServer`), pas de framework. Réduit la surface de dépendances.
+- [x] **Sécurité** : bind sur `127.0.0.1` par défaut (loopback-only). `--host 0.0.0.0` possible mais documenté comme risque si exposé sur réseau.
+
+### Tâches & rappels M4 (décidé en M4 — 2026-04-17)
+- [x] **WindowsScheduler** (`schtasks /Create`) retenu pour M4 comme plateforme cible principale.
+  Interface `ReminderScheduler` identique au guideline §10. MacOS/Linux = stub loggué, branchable en M5.
+- [x] **TaskPanel** : overlay React DOM gauche (240px), liste hiérarchique avec checkboxes, barre de progression, tri undone-first.
+  Interaction : clic checkbox → IPC `toggle-task` → refresh graph. Clic titre → focus 3D.
+- [x] **Sous-tâches 3D** : nodes avec `parent:` = tétraèdres 60 % plus petits + ressort PARENT_SPRING (0.04) vers le parent, rest_len 3 units. Lien visuel orange (EdgeLine kind `parent`).
+- [x] **IPC toggle-task** : `ipcMain.handle('toggle-task')` dans main, exposé via `contextBridge` dans preload.
+  Après toggle, le renderer re-appelle `getGraph()` pour rafraîchir l'état.
+
+### UI 3D M3 (décidé en M3 — 2026-04-17)
+- [x] **Stack** : `three` 0.184 + `@react-three/fiber` 9.6 + `@react-three/drei` 10.7.
+- [x] **Géométries par type** : master=sphère XL émissive, doc=sphère, code=cube, task=tétraèdre, note=octaèdre, asset=cylindre, reminder=tore.
+- [x] **Physique** : force-directed 3D custom dans `useFrame` — attraction radiale proportionnelle à `gravity`, répulsion entre nodes, ressorts sur les edges.
+- [x] **Liens** : `THREE.Line` via `<primitive>` — blancs pour `link`, gris pour `tag`.
+- [x] **Étoile** : sphère émissive dorée + halo glow (BackSide transparent).
+- [x] **Navigation** : `OrbitControls` libre (orbit + zoom scroll), focus automatique au clic.
+- [x] **Labels** : `<Html>` drei, disparaissent quand caméra > ORBIT_SCALE × 3.
+- [x] **Star field** : 1200 points aléatoires qui tournent lentement.
+- [x] **Tooltip** : panel React DOM en overlay (identique M2, port direct).
+- [x] **Workaround CIFS mount** : npm ne peut pas remplacer les fichiers de l'ancienne session sur le mount Shadow Cloud. three.js installé dans `/sessions/.../three_tmp/node_modules`, résolu via `resolve.alias` dans `vite.config.ui.ts`.
 
 ---
 
