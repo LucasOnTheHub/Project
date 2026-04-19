@@ -158,6 +158,8 @@ export async function startHttpServer(
     res.end(JSON.stringify({ error: 'Not found', path: url.pathname }));
   });
 
+  server.on('close', () => clearInterval(sweepInterval));
+
   await new Promise<void>((resolve, reject) => {
     server.on('error', reject);
     server.listen(port, host, resolve);

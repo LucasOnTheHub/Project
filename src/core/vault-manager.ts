@@ -6,7 +6,7 @@
  */
 
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { existsSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { FrontMatterParser } from './front-matter.js';
@@ -244,9 +244,10 @@ export class VaultManager {
 
 /** Resolves `path` relative to `root`, throwing if the result escapes `root`. */
 function safeJoin(root: string, path: string): string {
-  const abs = resolve(join(root, path));
   const safeRoot = resolve(root);
-  if (!abs.startsWith(safeRoot + '/') && abs !== safeRoot) {
+  const abs = resolve(join(safeRoot, path));
+  const rel = relative(safeRoot, abs);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error(`Path traversal detected: '${path}' is outside the vault root`);
   }
   return abs;
