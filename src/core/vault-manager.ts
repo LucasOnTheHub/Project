@@ -6,7 +6,7 @@
  */
 
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { existsSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { FrontMatterParser } from './front-matter.js';
@@ -96,7 +96,7 @@ export class VaultManager {
     content: string = '',
     metadata: Partial<NodeMetadata> = {},
   ): Promise<ProjectNode> {
-    const absPath = join(this.vaultRoot, path);
+    const absPath = safeJoin(this.vaultRoot, path);
     await mkdir(dirname(absPath), { recursive: true });
 
     const fullMeta: NodeMetadata = {
@@ -120,7 +120,7 @@ export class VaultManager {
     path: string,
     patch: Partial<NodeMetadata> & { content?: string },
   ): Promise<ProjectNode> {
-    const absPath = join(this.vaultRoot, path);
+    const absPath = safeJoin(this.vaultRoot, path);
     const raw = await readFile(absPath, 'utf-8');
 
     const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -145,13 +145,13 @@ export class VaultManager {
   }
 
   async deleteNode(path: string): Promise<void> {
-    const absPath = join(this.vaultRoot, path);
+    const absPath = safeJoin(this.vaultRoot, path);
     await unlink(absPath);
     this.db.remove(path);
   }
 
   async linkNodes(from: string, to: string): Promise<ProjectNode> {
-    const absPath = join(this.vaultRoot, from);
+    const absPath = safeJoin(this.vaultRoot, from);
     const raw = await readFile(absPath, 'utf-8');
 
     const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -240,6 +240,17 @@ export class VaultManager {
   }
 
   close(): void { this.db.close(); }
+}
+
+/** Resolves `path` relative to `root`, throwing if the result escapes `root`. */
+function safeJoin(root: string, path: string): string {
+  const safeRoot = resolve(root);
+  const abs = resolve(join(safeRoot, path));
+  const rel = relative(safeRoot, abs);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`Path traversal detected: '${path}' is outside the vault root`);
+  }
+  return abs;
 }
 
 function today(): string {
